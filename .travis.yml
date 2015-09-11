@@ -4,20 +4,30 @@ matrix:
   include:
   - compiler: clang
     os: osx
+    env:
+      - ZIPNAME=openspin.osx-clang.zip
+      - EXENAME=openspin
   - compiler: clang
     os: linux
-    env: QMAKESPEC=linux-clang
+    env:
+      - ZIPNAME=openspin.linux-clang.zip
+      - QMAKESPEC=linux-clang
+      - EXENAME=openspin
   - compiler: gcc
     os: linux
+    env:
+      - ZIPNAME=openspin.linux-gcc.zip
+      - EXENAME=openspin
 script:
 - make -j
+- zip $ZIPNAME $EXENAME
 after_script:
 - cppcheck --enable=all -q `git ls-files *.cpp`
 deploy:
   provider: releases
   api_key:
     secure: WTNNiO6l29NG86dkDj89P/RuPBZItG2IbY5guzAeiJflGvnDCUY5cpMpEqEyavYQVLOosayJiqr0VV1qIAQ20Su6C6gfrLo5rnx7JvnRqgeIFgWA9JByYICfWVCzV1gYijl8W6+oMAApODWw9dpLk37rfWi9U7FprsynWEfUP8A=
-  file: openspin
+  file: openspin.*.zip
   skip_cleanup: true
   on:
     repo: bweir/OpenSpin
