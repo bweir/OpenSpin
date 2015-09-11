@@ -27,6 +27,7 @@ deploy:
   provider: releases
   api_key:
     secure: WTNNiO6l29NG86dkDj89P/RuPBZItG2IbY5guzAeiJflGvnDCUY5cpMpEqEyavYQVLOosayJiqr0VV1qIAQ20Su6C6gfrLo5rnx7JvnRqgeIFgWA9JByYICfWVCzV1gYijl8W6+oMAApODWw9dpLk37rfWi9U7FprsynWEfUP8A=
+  file_glob: true
   file: openspin.*.zip
   skip_cleanup: true
   on:
