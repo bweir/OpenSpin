@@ -10,7 +10,7 @@ matrix:
   - compiler: gcc
     os: linux
 script:
-- make -j4
+- make -j
 after_script:
 - cppcheck --enable=all -q `git ls-files *.cpp`
 deploy:
