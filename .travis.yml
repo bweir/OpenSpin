@@ -13,7 +13,7 @@ script:
 - pushd spin-standard-library-1.0.0/
 - wget https://github.com/lamestation/lamestation-sdk/releases/download/rc2-0.3.2/lamestation-sdk-rc2-0.3.2.zip
 - unzip lamestation-sdk-rc2-0.3.2.zip
-- SPINC='../openspin -qu' ./test.sh
+- SPINC='../build/openspin -qu' ./test.sh
 - popd
 after_script:
 - cppcheck --enable=all -q `git ls-files *.cpp`
