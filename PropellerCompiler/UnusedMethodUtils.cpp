@@ -24,13 +24,13 @@
 struct ObjectNameEntry
 {
     char filename[256];
-    int indent;
+    int nCompileIndex;
 };
 
-ObjectNameEntry s_objectNames[128];
+ObjectNameEntry s_objectNames[file_limit * file_limit];
 int s_nNumObjectNames = 0;
 
-void AddObjectName(char* pFilename, int indent)
+void AddObjectName(char* pFilename, int nCompileIndex)
 {
     strcpy(s_objectNames[s_nNumObjectNames].filename, pFilename);
 
@@ -41,22 +41,17 @@ void AddObjectName(char* pFilename, int indent)
         *pExtension = 0;
     }
 
-    s_objectNames[s_nNumObjectNames].indent = indent-1;
+    s_objectNames[s_nNumObjectNames].nCompileIndex = nCompileIndex;
     s_nNumObjectNames++;
 }
 
-int GetObjectName(int indent, int index)
+int GetObjectName(int nCompileIndex)
 {
-    int nCurrIndex = 0;
     for (int i = 0; i < s_nNumObjectNames; i++)
     {
-        if (s_objectNames[i].indent == indent)
+        if (s_objectNames[i].nCompileIndex == nCompileIndex)
         {
-            if (nCurrIndex == index)
-            {
-                return i;
-            }
-            nCurrIndex++;
+            return i;
         }
     }
     return -1;
@@ -105,7 +100,7 @@ struct ObjectEntry
     MethodUsage* pMethods;
 };
   
-ObjectEntry s_objects[file_limit];
+ObjectEntry s_objects[file_limit * file_limit];
 int s_nNumObjects;
 
 bool HaveObject(unsigned char* pObject)
@@ -170,7 +165,23 @@ int AddObject(unsigned char* pObject, int nObjectNameIndex)
 
 bool IsObjectUsed(char* pFilename)
 {
+    // chop off the .spin extension, saving the . char for restoring
+    char* pExtension = strstr(pFilename, ".spin");
+    char savedChar = 0;
+    if (pExtension != 0)
+    {
+        savedChar = *pExtension;
+        *pExtension = 0;
+    }
+
     ObjectEntry* pObject = GetObjectByName(pFilename);
+
+    // restore extention to passed in filename
+    if (pExtension != 0)
+    {
+        *pExtension = savedChar;
+    }
+
     if (pObject && pObject->nMethodsCalled > 0)
     {
         return true;
@@ -202,7 +213,7 @@ struct ObjectPubConListEntry
     int nPubConListSize;
 };
 
-ObjectPubConListEntry s_objectPubConLists[512];
+ObjectPubConListEntry s_objectPubConLists[file_limit * file_limit];
 int s_nNumObjectPubConLists;
 
 ObjectPubConListEntry* GetObjectPubConListEntryByName(char* pFilename)
@@ -239,6 +250,48 @@ bool GetObjectPubConList(char* pFilename, unsigned char** ppPubConList, int* pnP
     return false;
 }
 
+struct ObjectCogInitEntry
+{
+    char filename[256];
+    int nSubConstant;
+};
+
+ObjectCogInitEntry s_objectCogInits[file_limit * file_limit];
+int s_nNumObjectCogInits;
+
+void AddCogNewOrInit(char* pFilename, int nSubConstant)
+{
+    if (s_nNumObjectCogInits > 0)
+    {
+        // see if this combo already is in the array
+        for (int i = s_nNumObjectCogInits; i > 0; i--)
+        {
+            if (s_objectCogInits[i-1].nSubConstant == nSubConstant && strcmp(s_objectCogInits[i-1].filename, pFilename) == 0)
+            {
+                return;
+            }
+        }
+    }
+    // wasn't already there, so add it
+    strcpy(s_objectCogInits[s_nNumObjectCogInits].filename, pFilename);
+    s_objectCogInits[s_nNumObjectCogInits].nSubConstant = nSubConstant;
+    s_nNumObjectCogInits++;
+}
+
+void MarkCalls(MethodUsage* pMethod, ObjectEntry* pObject);
+
+void CheckForCogNewOrInit(ObjectEntry* pObject)
+{
+    char* pObjectFilename = s_objectNames[pObject->nObjectNameIndex].filename;
+    for (int i = 0; i < s_nNumObjectCogInits; i++)
+    {
+        if (strcmp(s_objectCogInits[i].filename, pObjectFilename) == 0)
+        {
+            MarkCalls(&(pObject->pMethods[s_objectCogInits[i].nSubConstant-1]), pObject);
+        }
+    }
+}
+
 void CleanUpUnusedMethodData()
 {
     for (int i = 0; i < s_nNumObjects; i++)
@@ -266,21 +319,24 @@ void CleanUpUnusedMethodData()
         s_objectPubConLists[i].pPubConList = 0;
     }
     s_nNumObjectPubConLists = 0;
+
+    s_nNumObjectCogInits = 0;
 }
 
 void InitUnusedMethodData()
 {
-    for (int i = 0; i < file_limit; i++)
+    for (int i = 0; i < (file_limit * file_limit); i++)
     {
         s_objectPubConLists[i].filename[0] = 0;
         s_objectPubConLists[i].pPubConList = 0;
         s_objectPubConLists[i].nPubConListSize = 0;
     }
     s_nNumObjectPubConLists = 0;
+    s_nNumObjectCogInits = 0;
     s_nNumObjectNames = 0;
 }
 
-void BuildTables(unsigned char* pObject, int indent, int index)
+void BuildTables(unsigned char* pObject, int indent, int& nCompileIndex)
 {
 #ifdef RPE_DEBUG
 #define MAX_INDENT 32
@@ -294,8 +350,9 @@ void BuildTables(unsigned char* pObject, int indent, int index)
 #endif
         return;
     }
+    nCompileIndex++;
     int nNextObjOffset = *((unsigned short *)pObject);
-    int nObjectName = GetObjectName(indent, index);
+    int nObjectName = GetObjectName(nCompileIndex);
     int nObject = AddObject(pObject, nObjectName);
 
 #ifdef RPE_DEBUG
@@ -308,7 +365,20 @@ void BuildTables(unsigned char* pObject, int indent, int index)
 #ifdef RPE_DEBUG
             printf("%s Object Offset: %04d  Vars Offset: %d\n", &s_indent[MAX_INDENT-indent], s_objects[nObject].pIndexTable[i].offset, s_objects[nObject].pIndexTable[i].vars);
 #endif
-            BuildTables(&(pObject[s_objects[nObject].pIndexTable[i].offset]), indent + 1, i - s_objects[nObject].nObjectMethodCount);
+            // this skip logic here is to handle the case where there are multiple instances of the same object source included
+            // either as an array of objects or as separately named objects
+            bool bSkip = false;
+            for (int j = 0; j < i; j++)
+            {
+                if (s_objects[nObject].pIndexTable[i].offset == s_objects[nObject].pIndexTable[j].offset)
+                {
+                    bSkip = true;
+                }
+            }
+            if (!bSkip)
+            {
+                BuildTables(&(pObject[s_objects[nObject].pIndexTable[i].offset]), indent + 1, nCompileIndex);
+            }
         }
 #ifdef RPE_DEBUG
         else
@@ -435,7 +505,9 @@ int ScanExtraOpcode(unsigned char* pOpcode, int opcode)
     }
     else
     {
+#ifdef _DEBUG
         printf("NOT IMPLEMENTED\n");
+#endif
     }
 
     return nOpSize;
@@ -501,7 +573,9 @@ int ScanRegisterOpcode(unsigned char* pOpcode, int operand)
     }
     else
     {
+#ifdef _DEBUG
         printf("Undefined register operation\n");
+#endif
     }
 
     return nOpSize;
@@ -531,10 +605,22 @@ int ScanLowerOpcode(unsigned char* pOpcode, MethodUsage* pUsage, ObjectEntry* pO
             {
                 // indexed
             }
+
+            // skip over invalid calls (happens when we scan strings as opcodes, this can go away when we fix scanning strings properly)
+            if (objnum < 0 || objnum > (pObject->nObjectMethodCount + pObject->nObjectSubObjectCount)) 
+            {
+                return nOpSize + 1;
+            }
         }
 
         int pubnum = pOpcode[nOpSize];
         nOpSize++;
+
+        // skip over invalid calls (happens when we scan strings as opcodes, this can go away when we fix scanning strings properly)
+        if (objnum == 0 && (pubnum < 0 || pubnum > pObject->nObjectMethodCount))
+        {
+            return nOpSize;
+        }
 
         // need to update usage here
         if (pUsage->pCalls == 0)
@@ -620,7 +706,9 @@ int ScanLowerOpcode(unsigned char* pOpcode, MethodUsage* pUsage, ObjectEntry* pO
         }
         else
         {
+#ifdef _DEBUG
             printf("%2.2x - NOT IMPLEMENTED\n", opcode);
+#endif
         }
     }
     else if (opcode >= 0x16 && opcode <= 0x23)
@@ -731,7 +819,9 @@ int ScanLowerOpcode(unsigned char* pOpcode, MethodUsage* pUsage, ObjectEntry* pO
     }
     else
     {
+#ifdef _DEBUG
         printf("NOT PROCESSED\n");
+#endif
     }
 
     return nOpSize;
@@ -841,7 +931,8 @@ void FindUnusedMethods(CompilerData* pCompilerData)
     }
     s_nNumObjects = 0;
 
-    BuildTables(&(pCompilerData->obj[4]), 0, 0);
+    int nCompileIndex = 0;
+    BuildTables(&(pCompilerData->obj[4]), 0, nCompileIndex);
 
     for (int i = 0; i < s_nNumObjects; i++)
     {
@@ -851,6 +942,11 @@ void FindUnusedMethods(CompilerData* pCompilerData)
     ObjectEntry* pObject = &(s_objects[0]);
     MethodUsage* pMethod = &(pObject->pMethods[0]);
     MarkCalls(pMethod, pObject);
+
+    for (int i = 0; i < s_nNumObjects; i++)
+    {
+        CheckForCogNewOrInit(&s_objects[i]);
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////

@@ -44,6 +44,7 @@ HEADERS += \
     ../PropellerCompiler/PropellerCompilerInternal.h \
     ../PropellerCompiler/SymbolEngine.h \
     ../PropellerCompiler/Utilities.h \
+	../PropellerCompiler/UnusedMethodUtils.h \
     ../SpinSource/flexbuf.h \
     ../SpinSource/objectheap.h \
     ../SpinSource/pathentry.h \

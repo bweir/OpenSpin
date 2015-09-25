@@ -11,7 +11,7 @@
 
 struct CompilerData;
 
-void AddObjectName(char* pFilename, int indent);
+void AddObjectName(char* pFilename, int nCompileIndex);
 void FindUnusedMethods(CompilerData* pCompilerData);
 void CleanUpUnusedMethodData();
 void InitUnusedMethodData();
@@ -20,6 +20,8 @@ bool IsObjectUsed(char* pFilename);
 bool IsMethodUsed(char* pFilename, int nMethod);
 void AddObjectPubConList(char* pFilename, unsigned char* pPubConList, int nPubConListSize);
 bool GetObjectPubConList(char* pFilename, unsigned char** ppPubConList, int* pnPubConListSize);
+
+void AddCogNewOrInit(char* pFilename, int nSubConstant);
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////

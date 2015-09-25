@@ -1,7 +1,7 @@
 ///////////////////////////////////////////////////////////////
 //                                                           //
 // Propeller Spin/PASM Compiler Command Line Tool 'OpenSpin' //
-// (c)2012-2013 Parallax Inc. DBA Parallax Semiconductor.    //
+// (c)2012-2015 Parallax Inc.                                //
 // Adapted from Jeff Martin's Delphi code by Roy Eltham      //
 // See end of file for terms of use.                         //
 //                                                           //
@@ -14,7 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../PropellerCompiler/PropellerCompiler.h"
+#include "PropellerCompiler.h"
 #include "objectheap.h"
 #include "pathentry.h"
 #include "textconvert.h"
@@ -45,6 +45,7 @@ static int  s_nObjStackPtr = 0;
 static int  s_nFilesAccessed = 0;
 static char s_filesAccessed[MAX_FILES][PATH_MAX];
 static bool s_bFinalCompile = false;
+static bool s_bUnusedMethodElimination = true;
 
 FILE* OpenFileInPath(const char *name, const char *mode)
 {
@@ -231,8 +232,9 @@ void PrintError(const char* pFilename, const char* pErrorString)
     printf("Line:\n%s\nOffending Item: %s\n", errorLine, errorItem);
 }
 
-bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly)
+bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, int& nCompileIndex)
 {
+    nCompileIndex++;
     if (s_nObjStackPtr > 0 && (!bQuiet || bFileTreeOutputOnly))
     {
         char spaces[] = "                              \0";
@@ -256,9 +258,9 @@ bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly)
         return false;
     }
 
-    if ( !s_pCompilerData->bFinalCompile )
+    if (!s_pCompilerData->bFinalCompile  && s_bUnusedMethodElimination)
     {
-        AddObjectName(pFilename, s_nObjStackPtr);
+        AddObjectName(pFilename, nCompileIndex);
     }
 
     strcpy(s_pCompilerData->current_filename, pFilename);
@@ -293,7 +295,7 @@ bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly)
 
         for (int i = 0; i < numObjects; i++)
         {
-            if (!CompileRecursively(&filenames[i<<8], bQuiet, bFileTreeOutputOnly))
+            if (!CompileRecursively(&filenames[i<<8], bQuiet, bFileTreeOutputOnly, nCompileIndex))
             {
                 return false;
             }
@@ -473,6 +475,7 @@ bool ComposeRAM(unsigned char** ppBuffer, int& bufferSize, bool bDATonly, bool b
     return true;
 }
 
+
 void CleanupMemory(bool bPathsAndUnusedMethodData = true)
 {
     // cleanup
@@ -511,7 +514,7 @@ int main(int argc, char* argv[])
     bool bFileTreeOutputOnly = false;
     bool bFileListOutputOnly = false;
     bool bDumpSymbols = false;
-    bool bUnusedMethodElimination = false;
+    s_bUnusedMethodElimination = true;
 
     QCoreApplication app(argc, argv);
 
@@ -580,7 +583,7 @@ int main(int argc, char* argv[])
     if (parser.isSet(usePreprocessor))      s_bUsePreprocessor = true;
     if (parser.isSet(useAlternatePP))       s_bAlternatePreprocessorMode = true;
     if (parser.isSet(symbolInformation))    bDumpSymbols = true;
-    if (parser.isSet(unusedMethodRemoval))  bUnusedMethodElimination = true;
+    if (parser.isSet(unusedMethodRemoval))  s_bUnusedMethodElimination = true;
 
     QByteArray ba = parser.value(outputFile).toLocal8Bit();
     if (!parser.value(outputFile).isEmpty())
@@ -707,9 +710,14 @@ int main(int argc, char* argv[])
         printf("%s\n", infile);
     }
 
-    InitUnusedMethodData();
+    if ( s_bUnusedMethodElimination )
+    {
+        InitUnusedMethodData();
+    }
+
 restart_compile:
     s_pCompilerData = InitStruct();
+    s_pCompilerData->bUnusedMethodElimination = s_bUnusedMethodElimination;
     s_pCompilerData->bFinalCompile = s_bFinalCompile;
 
     s_pCompilerData->list = new char[ListLimit];
@@ -743,7 +751,8 @@ restart_compile:
         *pExtension = 0;
     }
 
-    if (!CompileRecursively(infile, bQuiet, bFileTreeOutputOnly))
+    int nCompileIndex = 0;
+    if (!CompileRecursively(infile, bQuiet, bFileTreeOutputOnly, nCompileIndex))
     {
         CleanupMemory();
         return 1;
@@ -756,7 +765,7 @@ restart_compile:
 
     if (!bFileTreeOutputOnly && !bFileListOutputOnly && !bDumpSymbols)
     {
-        if (!s_bFinalCompile && bUnusedMethodElimination)
+        if (!s_bFinalCompile && s_bUnusedMethodElimination)
         {
             FindUnusedMethods(s_pCompilerData);
             s_bFinalCompile = true;
