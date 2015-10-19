@@ -514,7 +514,7 @@ int main(int argc, char* argv[])
     bool bFileTreeOutputOnly = false;
     bool bFileListOutputOnly = false;
     bool bDumpSymbols = false;
-    s_bUnusedMethodElimination = true;
+    s_bUnusedMethodElimination = false;
 
     QCoreApplication app(argc, argv);
 
