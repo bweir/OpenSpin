@@ -27,10 +27,8 @@
 #include <QDir>
 
 #define ObjFileStackLimit   16
-
 #define ListLimit           2000000
 #define DocLimit            2000000
-
 #define MAX_FILES           2048    // an object can only reference 32 other objects and only 32 dat files, so the worst case is 32*32*2 files
 
 #ifndef VERSION
@@ -174,6 +172,7 @@ bool GetPASCIISource(char* pFilename)
     if (pBuffer)
     {
         char* pPASCIIBuffer = new char[nLength+1];
+        memset(pPASCIIBuffer, 0, nLength + 1);
         if (!UnicodeToPASCII(pBuffer, nLength, pPASCIIBuffer, s_bUsePreprocessor))
         {
             printf("Unrecognized text encoding format!\n");
@@ -232,7 +231,7 @@ void PrintError(const char* pFilename, const char* pErrorString)
     printf("Line:\n%s\nOffending Item: %s\n", errorLine, errorItem);
 }
 
-bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, int& nCompileIndex)
+bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, int& nCompileIndex, int objCount)
 {
     nCompileIndex++;
     if (s_nObjStackPtr > 0 && (!bQuiet || bFileTreeOutputOnly))
@@ -260,7 +259,15 @@ bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, 
 
     if (!s_pCompilerData->bFinalCompile  && s_bUnusedMethodElimination)
     {
-        AddObjectName(pFilename, nCompileIndex);
+        // handle arrays of objects (we need them all added instead of just one, so that things sync up in the unused method tracking logic)
+        for (int i = 0; i < objCount; i++)
+        {
+            if (i > 0)
+            {
+                nCompileIndex++;
+            }
+            AddObjectName(pFilename, nCompileIndex);
+        }
     }
 
     strcpy(s_pCompilerData->current_filename, pFilename);
@@ -281,6 +288,7 @@ bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, 
     if (s_pCompilerData->obj_files > 0)
     {
         char filenames[file_limit*256];
+        int objCounts[file_limit];
 
         int numObjects = s_pCompilerData->obj_files;
         for (int i = 0; i < numObjects; i++)
@@ -291,11 +299,12 @@ bool CompileRecursively(char* pFilename, bool bQuiet, bool bFileTreeOutputOnly, 
             {
                 strcat(&filenames[i<<8], ".spin");
             }
+            objCounts[i] = s_pCompilerData->obj_instances[i];
         }
 
         for (int i = 0; i < numObjects; i++)
         {
-            if (!CompileRecursively(&filenames[i<<8], bQuiet, bFileTreeOutputOnly, nCompileIndex))
+            if (!CompileRecursively(&filenames[i<<8], bQuiet, bFileTreeOutputOnly, nCompileIndex, objCounts[i]))
             {
                 return false;
             }
@@ -672,7 +681,6 @@ int main(int argc, char* argv[])
         if (pTemp == 0)
         {
             printf("ERROR: spinfile must have .spin extension. You passed in: %s\n", infile);
-            //Usage();
             CleanupMemory();
             return 1;
         }
@@ -752,7 +760,7 @@ restart_compile:
     }
 
     int nCompileIndex = 0;
-    if (!CompileRecursively(infile, bQuiet, bFileTreeOutputOnly, nCompileIndex))
+    if (!CompileRecursively(infile, bQuiet, bFileTreeOutputOnly, nCompileIndex, 1))
     {
         CleanupMemory();
         return 1;
