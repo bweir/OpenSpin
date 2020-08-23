@@ -51,3 +51,9 @@ HEADERS += \
     ../SpinSource/preprocess.h \
     ../SpinSource/textconvert.h
 
+isEmpty(PREFIX) {
+    PREFIX = /usr/local
+}
+
+target.path = $$PREFIX/bin
+INSTALLS += target
